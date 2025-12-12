@@ -1,0 +1,5 @@
+{
+  "name": "StoicBot",
+  "description": "An automated generator for viral-style Stoic philosophy videos using Gemini AI for text, speech, and video.",
+  "requestFramePermissions": []
+}

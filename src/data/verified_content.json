@@ -1,0 +1,86 @@
+{
+    "prayers": {
+        "JUAN PABLO II FAMILIA": {
+            "text": "Oh Dios, de quien procede toda paternidad en el cielo y en la tierra, Padre, que eres Amor y Vida, haz que en cada familia humana sobre la tierra se convierta, por medio de tu Hijo, Jesucristo, nacido de Mujer, y del Espíritu Santo, fuente de caridad divina, en verdadero santuario de la vida y del amor para las generaciones porque siempre se renuevan. Haz que tu gracia guíe a los pensamientos y las obras de los esposos hacia el bien de sus familias y de todas las familias del mundo. Tú, que eres la Vida, la Verdad y El Amor, en la unidad del Hijo y del Espíritu santo. Amén.",
+            "author": "San Juan Pablo II",
+            "source": "Oración a la Sagrada Familia (1980)"
+        },
+        "SAN MIGUEL ARCANGEL": {
+            "text": "San Miguel Arcángel, defiéndenos en la batalla. Sé nuestro amparo contra la perversidad y acechanzas del demonio. Que Dios manifieste sobre él su poder, es nuestra humilde súplica. Y tú, oh Príncipe de la Milicia Celestial, con el poder que Dios te ha conferido, arroja al infierno a Satanás, y a los demás espíritus malignos que vagan por el mundo para la perdición de las almas. Amén.",
+            "author": "Papa León XIII",
+            "source": "Oración a San Miguel (1884)"
+        },
+        "SAN JUDAS TADEO": {
+            "text": "¡Oh gloriosísimo Apóstol San Judas, fiel siervo y amigo de Jesús! El nombre del traidor que entregó a tu amado Maestro en manos de sus enemigos ha sido la causa de que muchos te hayan olvidado, pero la Iglesia te honra e invoca universalmente como el patrón de los casos difíciles y desesperados. Ruega por mí, que soy tan miserable, y haz uso, te ruego, de ese privilegio especial a ti concedido de socorrer visible y prontamente cuando casi se ha perdido toda esperanza. Ven en mi ayuda en esta gran necesidad. Amén.",
+            "author": "Tradición Católica",
+            "source": "Oración para Casos Difíciles"
+        },
+        "SAN BENITO": {
+            "text": "Glorioso San Benito, Padre espiritual de todos los monjes. Tú que ayudaste a quien te lo solicitó, tú que hiciste milagros, pido que remedies mis necesidades. Suplico la paz en mi vida, que abunde la tranquilidad y el bienestar. Que nadie pueda hacernos mal, y la luz nos guíe por el camino correcto. La Santa Cruz sea mi luz, no sea el dragón mi guía. ¡Apártate, Satanás! No me sugieras cosas vanas. Maldad es lo que brindas, bebe tú mismo tu veneno. Amén.",
+            "author": "Tradición Benedictina",
+            "source": "Oración de la Medalla de San Benito"
+        },
+        "VIRGEN DE GUADALUPE": {
+            "text": "Santa María de Guadalupe, Mística Rosa, intercede por la Iglesia, protege al Soberano Pontífice, oye a todos los que te invocan en sus necesidades. Así como pudiste aparecer en el Tepeyac y decirnos: '¿No estoy yo aquí que soy tu Madre?', danos la gracia de contar siempre con tu protección maternal y celestial, y la dicha de alabarte y bendecirte por siempre en el cielo. Amén.",
+            "author": "Tradición Mexicana",
+            "source": "Oración Popular"
+        },
+        "PADRE NUESTRO": {
+            "text": "Padre nuestro, que estás en el cielo, santificado sea tu Nombre; venga a nosotros tu reino; hágase tu voluntad en la tierra como en el cielo. Danos hoy nuestro pan de cada día; perdona nuestras ofensas, como también nosotros perdonamos a los que nos ofenden; no nos dejes caer en la tentación, y líbranos del mal. Amén.",
+            "author": "Jesucristo",
+            "source": "Mateo 6:9-13 (Litúrgico)"
+        },
+        "AVE MARIA": {
+            "text": "Dios te salve, María, llena eres de gracia; el Señor es contigo. Bendita tú eres entre todas las mujeres, y bendito es el fruto de tu vientre, Jesús. Santa María, Madre de Dios, ruega por nosotros, pecadores, ahora y en la hora de nuestra muerte. Amén.",
+            "author": "Iglesia Católica",
+            "source": "Oración Mariana Tradicional"
+        },
+        "CREDO": {
+            "text": "Creo en Dios, Padre Todopoderoso, Creador del cielo y de la tierra. Creo en Jesucristo, su único Hijo, Nuestro Señor, que fue concebido por obra y gracia del Espíritu Santo, nació de Santa María Virgen, padeció bajo el poder de Poncio Pilato, fue crucificado, muerto y sepultado, descendió a los infiernos, al tercer día resucitó de entre los muertos, subió a los cielos y está sentado a la derecha de Dios Padre Todopoderoso. Desde allí ha de venir a juzgar a vivos y a muertos. Creo en el Espíritu Santo, la Santa Iglesia Católica, la comunión de los Santos, el perdón de los pecados, la resurrección de la carne y la vida eterna. Amén.",
+            "author": "Iglesia Católica",
+            "source": "Credo de los Apóstoles"
+        },
+        "SALVE REGINA": {
+            "text": "Dios te salve, Reina y Madre de misericordia, vida, dulzura y esperanza nuestra; Dios te salve. A ti llamamos los desterrados hijos de Eva; a ti suspiramos, gimiendo y llorando en este valle de lágrimas. Ea, pues, Señora, abogada nuestra, vuelve a nosotros esos tus ojos misericordiosos; y después de este destierro muéstranos a Jesús, fruto bendito de tu vientre. ¡Oh clemente, oh piadosa, oh dulce siempre Virgen María! Ruega por nosotros, Santa Madre de Dios, para que seamos dignos de alcanzar las promesas de Nuestro Señor Jesucristo. Amén.",
+            "author": "Iglesia Católica",
+            "source": "Oración Mariana Tradicional"
+        },
+        "GLORIA": {
+            "text": "Gloria al Padre, y al Hijo, y al Espíritu Santo. Como era en el principio, ahora y siempre, por los siglos de los siglos. Amén.",
+            "author": "Iglesia Católica",
+            "source": "Doxología Menor"
+        },
+        "ANGEL DE LA GUARDA": {
+            "text": "Ángel de mi guarda, dulce compañía, no me desampares ni de noche ni de día, hasta que me entregues en los brazos de Jesús, José y María. Con Dios me acuesto, con Dios me levanto, con la Virgen María y el Espíritu Santo. Amén.",
+            "author": "Tradición Católica",
+            "source": "Oración al Ángel Custodio"
+        },
+        "YO CONFIESO": {
+            "text": "Yo confieso ante Dios todopoderoso, y ante ustedes, hermanos, que he pecado mucho de pensamiento, palabra, obra y omisión. Por mi culpa, por mi culpa, por mi gran culpa. Por eso ruego a santa María, siempre Virgen, a los ángeles, a los santos y a ustedes, hermanos, que intercedan por mí ante Dios, nuestro Señor. Amén.",
+            "author": "Iglesia Católica",
+            "source": "Acto Penitencial (Misa)"
+        },
+        "ACTO DE CONTRICION": {
+            "text": "Señor mío, Jesucristo, Dios y Hombre verdadero, Creador, Padre y Redentor mío; por ser Tú quien eres y porque te amo sobre todas las cosas, me pesa de todo corazón haberte ofendido; propongo firmemente nunca más pecar, apartarme de todas las ocasiones de ofenderte, confesarme y cumplir la penitencia que me fuera impuesta. Amén.",
+            "author": "Iglesia Católica",
+            "source": "Oración de Penitencia"
+        }
+    },
+    "quotes": {
+        "SENECA TIEMPO": {
+            "text": "No es que tengamos poco tiempo, sino que perdemos mucho. La vida es lo bastante larga y se nos ha dado con generosidad para la realización de las cosas más importantes, si toda ella se emplea bien. Pero cuando se disipa en el lujo y la negligencia, cuando no se gasta en nada bueno, al final, apremiados por la necesidad última, nos damos cuenta de que ha pasado sin que hayamos entendido cómo pasaba.",
+            "author": "Séneca",
+            "source": "De Brevitate Vitae"
+        },
+        "MARCO AURELIO MENTE": {
+            "text": "La felicidad de tu vida depende de la calidad de tus pensamientos. Por lo tanto, guarda bien tu mente y asegúrate de que no albergue pensamientos inadecuados para la virtud y la naturaleza razonable.",
+            "author": "Marco Aurelio",
+            "source": "Meditaciones"
+        },
+        "EPICTETO CONTROL": {
+            "text": "La libertad es la única meta digna en la vida. Se consigue ignorando las cosas que están más allá de nuestro control. No pidas que las cosas lleguen como tú las deseas, sino deséalas tal como llegan, y prosperarás siempre.",
+            "author": "Epicteto",
+            "source": "Enquiridión"
+        }
+    }
+}
