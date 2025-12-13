@@ -180,44 +180,9 @@ const App: React.FC = () => {
         }
     };
 
-    // Fetch Daily Word from BibleOn (automatic)
-    const fetchAndUseDailyWord = async () => {
-        console.log('🔘 Button clicked - fetchAndUseDailyWord called');
-        try {
-            setStatusText("Obteniendo Palabra del Día...");
-            console.log('📥 Importing bibliaonService...');
-            const { fetchDailyWord } = await import('./services/bibliaonService');
-            console.log('✅ Service imported, calling fetchDailyWord...');
-            const dailyWord = await fetchDailyWord();
-            console.log('✅ Daily word received:', dailyWord);
+    // Daily Word function removed per user request
 
-            // Populate manual mode fields
-            setIsManualMode(true);
-
-            // Format Date for Title (e.g. "Sábado, 13 de Diciembre")
-            const dateOptions: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
-            const dateStr = new Date().toLocaleDateString('es-ES', dateOptions);
-            const formattedDate = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
-
-            setManualTitle(`Palabra de Hoy - ${formattedDate}`);
-
-            // Construct structured text
-            const combinedText = `${dailyWord.title}\n\n${dailyWord.verse}\n(${dailyWord.verseReference})\n\nReflexión\n\n${dailyWord.reflection}`;
-
-            setManualText(combinedText);
-            setManualAuthor("Palabra del Señor");
-            setManualCategory('CHRISTIAN');
-
-            setStatusText("");
-            alert(`✅ Palabra del Día cargada con formato.`);
-        } catch (error: any) {
-            console.error('❌ Error in fetchAndUseDailyWord:', error);
-            alert(error.message || "Error al obtener la Palabra del Día");
-            setStatusText("");
-        }
-    };
-
-    // Fetch Vatican News Content (Gospel or Reading)
+    // Fetch Vatican News Content (Gospel or Reading) and auto-generate video
     const fetchVaticanContent = async (type: 'GOSPEL' | 'READING_1' | 'READING_2' | 'PSALM') => {
         try {
             const labels = {
@@ -234,14 +199,15 @@ const App: React.FC = () => {
             const selected = readings.find(r => r.type === type);
 
             if (selected) {
-                setIsManualMode(true);
-                setManualTitle(selected.title);
-                setManualText(selected.text);
-                setManualAuthor(selected.reference); // e.g. "Mt 11, 25-30"
-                setManualCategory('CHRISTIAN');
+                console.log(`✅ ${selected.title} encontrado. Generando video...`);
 
-                setStatusText("");
-                alert(`✅ ${selected.title} cargado correctamente.`);
+                // Generate video directly with reading data (bypass React state issues)
+                await generateVideoFromData({
+                    title: selected.title,
+                    text: selected.text,
+                    author: selected.reference,
+                    category: 'CHRISTIAN'
+                });
             } else {
                 throw new Error(`No se encontró "${labels[type]}" para hoy.`);
             }
@@ -249,6 +215,141 @@ const App: React.FC = () => {
         } catch (error: any) {
             console.error('❌ Error in fetchVaticanContent:', error);
             alert("No se pudo obtener la lectura del Vaticano.");
+            setStatusText("");
+        }
+    };
+
+    // Generate video directly from data without relying on state
+    const generateVideoFromData = async (data: { title: string; text: string; author: string; category: 'STOIC' | 'CHRISTIAN' }) => {
+        try {
+            setErrorMsg('');
+            setCurrentContent(null);
+
+            // 1. Prepare Quote from provided data
+            setState(AppState.GENERATING_QUOTE);
+
+            // Sanitize text
+            let cleanText = data.text;
+            cleanText = cleanText.replace(/\(Pausa\)/gi, '');
+            cleanText = cleanText.replace(/\(Selah\)/gi, '');
+            cleanText = cleanText.replace(/\(Interludio\)/gi, '');
+            cleanText = cleanText.trim();
+
+            const quote: ViralQuote = {
+                text: cleanText,
+                title: data.title || undefined,
+                author: data.author || "Anónimo",
+                theme: `${data.title || ''} ${data.category} spiritual dramatic lighting`,
+                category: data.category
+            };
+
+            console.log("📹 Generating video with quote:", quote);
+
+            // 2. Fetch Images
+            setState(AppState.GENERATING_MEDIA);
+
+            let imageUrls: string[] = [];
+            let customMediaObj = undefined;
+
+            if (manualMediaUrls.length > 0 && manualMediaType === 'images') {
+                imageUrls = manualMediaUrls;
+            } else if (manualMediaUrls.length > 0 && manualMediaType === 'video') {
+                customMediaObj = {
+                    type: 'video',
+                    url: manualMediaUrls[0]
+                };
+                imageUrls = [manualMediaUrls[0]]; // Placeholder for video
+            } else {
+                setStatusText("Creando imágenes cinémáticas...");
+                const iconography = await findReferenceForText(`${quote.title || ''} ${quote.text} ${quote.author}`);
+                if (iconography) {
+                    console.log("✅ Iconography Description:", iconography.substring(0, 150));
+                }
+
+                const imagePromises = [
+                    generateCinematicImage(`${quote.theme} wide shot, cinematic lighting`, iconography),
+                    generateCinematicImage(`${quote.theme} close up, dramatic shadows`, iconography),
+                    generateCinematicImage(`${quote.theme} abstract atmosphere, particles`, iconography)
+                ];
+                imageUrls = await Promise.all(imagePromises);
+
+                if (imageUrls.length === 0) throw new Error("No images generated");
+            }
+
+            // 3. Generate Audio
+            setState(AppState.GENERATING_AUDIO);
+            setStatusText("Generando narración de voz...");
+
+            const spokenText = quote.title
+                ? `${quote.title}. ${quote.text}. ${quote.author} `
+                : `${quote.text}. ${quote.author} `;
+
+            const isStoic = quote.category === 'STOIC';
+            const audioOptions = {
+                pitch: isStoic ? 0.8 : 1.0,
+                rate: speechRate // Use the state variable speechRate
+            };
+
+            let audioData = null;
+            let isNativeAudio = false;
+
+            if (usePaidAi) {
+                setStatusText("Sintetizando Voz Neural (Google Studio)...");
+                try {
+                    const { generateGoogleTTS } = await import('./services/googleTtsService');
+                    audioData = await generateGoogleTTS(spokenText);
+                    isNativeAudio = true;
+                } catch (ttsErr) {
+                    console.warn("Google TTS failed, falling back to Browser", ttsErr);
+                    isNativeAudio = false;
+                }
+            }
+
+            if (!audioData) {
+                setStatusText("Sintetizando voz con navegador...");
+                audioData = await synthesizeSpeech(spokenText, audioOptions);
+                isNativeAudio = false;
+            }
+
+            // 4. Complete
+            const newContent: GeneratedContent = {
+                id: crypto.randomUUID(),
+                quote,
+                mediaType: customMediaObj?.type || 'image',
+                imageUrls,
+                audioData,
+                isNativeAudio,
+                audioOptions: audioOptions,
+                customMedia: customMediaObj,
+                fontFamily: selectedFont,
+                colorTheme: selectedTheme,
+                visualEffects: {
+                    blur: blurIntensity,
+                    vignette: vignetteStrength,
+                    transition: transitionType,
+                    transitionDuration: transitionDuration,
+                    speechRate: speechRate
+                },
+                musicTrackId: MUSIC_TRACKS[Math.floor(Math.random() * MUSIC_TRACKS.length)].id, // Randomize music for every generation per user request
+                watermark: {
+                    enabled: enableWatermark,
+                    type: watermarkType,
+                    text: watermarkText,
+                    logoUrl: watermarkLogoUrl,
+                    position: watermarkPosition,
+                    opacity: watermarkOpacity
+                },
+                createdAt: Date.now()
+            };
+
+            setHistory(prev => [newContent, ...prev]);
+            setCurrentContent(newContent);
+            setState(AppState.COMPLETED);
+            setStatusText("");
+        } catch (error: any) {
+            console.error("Generation Error:", error);
+            setState(AppState.ERROR);
+            setErrorMsg(error.message || "Error desconocido");
             setStatusText("");
         }
     };
@@ -837,14 +938,7 @@ const App: React.FC = () => {
                                 <div className="flex flex-col gap-4 bg-stone-900/50 p-6 rounded-2xl border border-stone-800 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-300">
                                     <h3 className="text-center text-purple-400 font-bold tracking-widest text-xs uppercase mb-2">Ingreso Manual de Contenido</h3>
 
-                                    {/* Daily Word Button */}
-                                    <button
-                                        onClick={fetchAndUseDailyWord}
-                                        className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold py-3 px-6 rounded-lg transition flex items-center justify-center gap-2 text-sm shadow-lg"
-                                    >
-                                        <Sparkles size={16} />
-                                        ⚡ Cargar Palabra del Día
-                                    </button>
+                                    {/* Daily Word Button removed per user request */}
 
                                     <div className="space-y-2">
                                         <label className="text-xs text-stone-500 uppercase tracking-wider font-bold">Título (Opcional)</label>
@@ -938,13 +1032,7 @@ const App: React.FC = () => {
                                     <p className="text-xs uppercase tracking-widest font-bold">Peticiones y Oraciones de Poder</p>
                                 </div>
                                 <div className="flex flex-wrap justify-center gap-2">
-                                    <button
-                                        onClick={fetchAndUseDailyWord}
-                                        className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/50 rounded-full text-[10px] text-amber-200 uppercase tracking-widest font-bold transition flex items-center gap-2"
-                                    >
-                                        <BookOpen size={12} />
-                                        Palabra del día
-                                    </button>
+                                    {/* Palabra del día button removed */}
                                     <button
                                         onClick={() => fetchVaticanContent('GOSPEL')}
                                         className="px-3 py-1 bg-red-500/20 hover:bg-red-500/40 border border-red-500/50 rounded-full text-[10px] text-red-200 uppercase tracking-widest font-bold transition flex items-center gap-2"
