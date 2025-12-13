@@ -769,6 +769,19 @@ const App: React.FC = () => {
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 w-full flex flex-col items-center gap-4">
                             <VideoPlayer content={currentContent} />
 
+                            {/* Back Button to Create Another Video */}
+                            <button
+                                onClick={() => {
+                                    setState(AppState.IDLE);
+                                    setCurrentContent(null);
+                                    setBatchResults([]);
+                                }}
+                                className="mt-4 px-6 py-3 bg-gradient-to-r from-stone-700 to-stone-600 hover:from-stone-600 hover:to-stone-500 text-white font-bold rounded-lg transition flex items-center gap-2 shadow-lg"
+                            >
+                                <Sparkles size={16} />
+                                ✨ Crear Otro Video
+                            </button>
+
                             {/* Batch Variations Grid */}
                             {batchResults.length > 0 && (
                                 <div className="w-full max-w-4xl mt-6">
