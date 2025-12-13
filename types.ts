@@ -24,6 +24,7 @@ export interface GeneratedContent {
     transitionDuration: number;
     speechRate: number;
   };
+  musicTrackId?: string; // ID of the selected music track
   watermark?: {
     enabled: boolean;
     type: 'text' | 'logo';

@@ -93,11 +93,24 @@ export const fetchDailyWord = async (): Promise<DailyWord> => {
             }
         }
 
-        // Get reflection (next 3-4 paragraphs after the verse)
+        // Get reflection (Iterate until we hit something that looks like a new section or end of content)
         const reflectionParts: string[] = [];
-        for (let i = startIndex; i < Math.min(paragraphs.length, startIndex + 4); i++) {
-            const text = paragraphs[i].textContent?.trim();
-            if (text && text.length > 20 && !text.includes('http') && !text.includes('Únete') && !text.includes('Lee también')) {
+        const versePattern = /\(.*\d+:\d+.*\)/; // Detects (Book Ch:Ver)
+
+        for (let i = startIndex; i < Math.min(paragraphs.length, startIndex + 6); i++) {
+            const text = paragraphs[i].textContent?.trim() || "";
+
+            // Stop if we hit a new verse or navigation header
+            if (text.includes('Lee también') || text.includes('Versículo del día') || (text.length > 10 && versePattern.test(text))) {
+                break;
+            }
+
+            // Skip junk but don't break yet if it's just a short spacer
+            if (text.includes('http') || text.includes('Únete')) {
+                continue;
+            }
+
+            if (text.length > 20) {
                 reflectionParts.push(text);
             }
         }

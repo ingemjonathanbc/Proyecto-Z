@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, GeneratedContent, ViralQuote } from './types';
 import { COLOR_THEMES } from './config/themes';
+import { MUSIC_TRACKS } from './config/music';
 import { getRandomQuote } from './services/quoteBank';
 import { generateFreeAiQuote } from './services/freeAiService';
 import { generateCinematicImage, generateProceduralFallback } from './services/imageService';
@@ -192,16 +193,62 @@ const App: React.FC = () => {
 
             // Populate manual mode fields
             setIsManualMode(true);
-            setManualTitle(dailyWord.title);
-            setManualText(dailyWord.verse);
-            setManualAuthor(dailyWord.verseReference);
+
+            // Format Date for Title (e.g. "Sábado, 13 de Diciembre")
+            const dateOptions: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+            const dateStr = new Date().toLocaleDateString('es-ES', dateOptions);
+            const formattedDate = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+
+            setManualTitle(`Palabra de Hoy - ${formattedDate}`);
+
+            // Construct structured text
+            const combinedText = `${dailyWord.title}\n\n${dailyWord.verse}\n(${dailyWord.verseReference})\n\nReflexión\n\n${dailyWord.reflection}`;
+
+            setManualText(combinedText);
+            setManualAuthor("Palabra del Señor");
             setManualCategory('CHRISTIAN');
 
             setStatusText("");
-            alert(`✅ Palabra del Día cargada: \n"${dailyWord.title}"`);
+            alert(`✅ Palabra del Día cargada con formato.`);
         } catch (error: any) {
             console.error('❌ Error in fetchAndUseDailyWord:', error);
             alert(error.message || "Error al obtener la Palabra del Día");
+            setStatusText("");
+        }
+    };
+
+    // Fetch Vatican News Content (Gospel or Reading)
+    const fetchVaticanContent = async (type: 'GOSPEL' | 'READING_1' | 'READING_2' | 'PSALM') => {
+        try {
+            const labels = {
+                'GOSPEL': 'Evangelio',
+                'READING_1': '1ra Lectura',
+                'READING_2': '2da Lectura',
+                'PSALM': 'Salmo'
+            };
+            setStatusText(`Buscando ${labels[type]}...`);
+            console.log('🙏 Calling vaticanService...');
+            const { getVaticanDailyReadings } = await import('./services/vaticanService');
+
+            const readings = await getVaticanDailyReadings();
+            const selected = readings.find(r => r.type === type);
+
+            if (selected) {
+                setIsManualMode(true);
+                setManualTitle(selected.title);
+                setManualText(selected.text);
+                setManualAuthor(selected.reference); // e.g. "Mt 11, 25-30"
+                setManualCategory('CHRISTIAN');
+
+                setStatusText("");
+                alert(`✅ ${selected.title} cargado correctamente.`);
+            } else {
+                throw new Error(`No se encontró "${labels[type]}" para hoy.`);
+            }
+
+        } catch (error: any) {
+            console.error('❌ Error in fetchVaticanContent:', error);
+            alert("No se pudo obtener la lectura del Vaticano.");
             setStatusText("");
         }
     };
@@ -234,11 +281,13 @@ const App: React.FC = () => {
                 cleanManualText = cleanManualText.replace(/\(Pausa\)/gi, '');
                 cleanManualText = cleanManualText.replace(/\(Selah\)/gi, '');
                 cleanManualText = cleanManualText.replace(/\(Interludio\)/gi, '');
-                // Replace all whitespace (including newlines, tabs) with single space
-                cleanManualText = cleanManualText.replace(/\s+/g, ' ').trim();
+                // Replace only multiple spaces/tabs within a line, but PRESERVE newlines
+                // Or just don't mangle it at all, just trim.
+                // cleanManualText = cleanManualText.replace(/\s+/g, ' ').trim(); // BAD: Flattens newlines
+                cleanManualText = cleanManualText.trim();
 
-                // Clean title too
-                let cleanTitle = (manualTitle || '').replace(/\s+/g, ' ').trim();
+                // Clean title too (Title can be flattened safely usually, but let's just trim)
+                let cleanTitle = (manualTitle || '').trim();
 
                 quote = {
                     text: cleanManualText,
@@ -290,17 +339,28 @@ const App: React.FC = () => {
             } else {
                 setStatusText("Pintando tríptico cinemático...");
                 try {
-                    // Get iconography description from Gemini (no external searches)
-                    setStatusText("Analizando iconografía tradicional...");
-                    const fullText = `${quote.title || ''} ${quote.text} ${quote.author}`;
-                    console.log("📝 Analyzing text for entities:", fullText.substring(0, 100) + "...");
-                    const iconographyDesc = await findReferenceForText(fullText);
+                    // Get iconography description
+                    // OPTIMIZATION: If FreeAiService already provided a detailed theme (Iconography), use it directly to save API quota (Fixes 429 Error)
+                    // We detect this if the theme is long (>50 chars) or comes from Verified/Search content.
+
+                    let iconographyDesc = "";
+
+                    if (quote.theme && quote.theme.length > 60 && (quote.theme.includes('icon') || quote.theme.includes('portrait'))) {
+                        console.log("✅ Using Pre-generated Theme (Skipping Gemini Extraction):", quote.theme);
+                        iconographyDesc = quote.theme;
+                    } else {
+                        setStatusText("Analizando iconografía tradicional...");
+                        const fullText = `${quote.title || ''} ${quote.text} ${quote.author}`;
+                        console.log("📝 Analyzing text for entities:", fullText.substring(0, 100) + "...");
+                        iconographyDesc = await findReferenceForText(fullText);
+                    }
 
                     if (iconographyDesc) {
-                        console.log("✅ Using iconography description for generation");
-                        console.log("📜 Iconography:", iconographyDesc.substring(0, 150) + "...");
+                        console.log("✅ Iconography Description:", iconographyDesc.substring(0, 150) + "...");
                     } else {
                         console.log("⚠️ No specific iconography found, using standard prompts");
+                        // Fallback to previous heuristic if no desc
+                        iconographyDesc = quote.theme || "cinematic religious scene";
                     }
 
                     setStatusText("Generando imágenes...");
@@ -383,6 +443,7 @@ const App: React.FC = () => {
                         transitionDuration: transitionDuration,
                         speechRate: speechRate
                     },
+                    musicTrackId: MUSIC_TRACKS[Math.floor(Math.random() * MUSIC_TRACKS.length)].id, // Randomize music for every generation per user request
                     watermark: {
                         enabled: enableWatermark,
                         type: watermarkType,
@@ -482,52 +543,7 @@ const App: React.FC = () => {
                         </button>
                     </div>
 
-                    {/* Font Selector */}
-                    <div className="flex items-center gap-2">
-                        <label className="text-xs text-stone-500 font-semibold">Fuente:</label>
-                        <select
-                            value={selectedFont}
-                            onChange={(e) => setSelectedFont(e.target.value)}
-                            className="bg-stone-900 text-stone-200 text-xs border border-stone-800 rounded-full px-3 py-2 focus:outline-none focus:border-purple-500/50 transition cursor-pointer"
-                        >
-                            {FONT_OPTIONS.map(font => (
-                                <option key={font.value} value={font.value}>{font.label}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Theme Selector */}
-                    <div className="flex items-center gap-2">
-                        <label className="text-xs text-stone-500 font-semibold">Tema:</label>
-                        <select
-                            value={selectedTheme}
-                            onChange={(e) => setSelectedTheme(e.target.value)}
-                            className="bg-stone-900 text-stone-200 text-xs border border-stone-800 rounded-full px-3 py-2 focus:outline-none focus:border-purple-500/50 transition cursor-pointer"
-                        >
-                            {COLOR_THEMES.map(theme => (
-                                <option key={theme.id} value={theme.id}>{theme.emoji} {theme.name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Language Selector */}
-                    <select
-                        value={selectedLanguage}
-                        onChange={(e) => setSelectedLanguage(e.target.value as 'es' | 'en')}
-                        className="text-xs px-3 py-2 rounded-full font-bold transition bg-stone-800 text-stone-300 border-stone-700"
-                    >
-                        <option value="es">🇪🇸 Español</option>
-                        <option value="en">🇺🇸 English</option>
-                    </select>
-
-                    {/* Batch Variations Toggle */}
-                    <button
-                        onClick={() => setIsBatchMode(!isBatchMode)}
-                        className={`text-xs px-3 py-2 rounded-full font-bold transition ${isBatchMode ? 'bg-purple-600 text-white' : 'bg-stone-800 text-stone-400'}`}
-                        title="Generar múltiples variaciones a la vez"
-                    >
-                        {isBatchMode ? '🎬 Modo Batch' : '🎬 Variaciones'}
-                    </button>
+                    {/* UI Customization Controls Removed */}
                 </div>
             </header>
 
@@ -547,13 +563,10 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            {/* Visual Effects Panel */}
-            <div className="max-w-2xl mx-auto mt-4 p-4 bg-stone-900/50 rounded-lg border border-stone-800">
+            {/* Visual Effects Panel - Hidden per user request */}
+            <div className="hidden">
                 <details className="group">
-                    <summary className="cursor-pointer text-sm font-bold text-stone-300 hover:text-white flex items-center gap-2">
-                        🎨 Efectos Visuales
-                        <span className="text-xs text-stone-500">(Click para expandir)</span>
-                    </summary>
+                    <summary>Hidden</summary>
                     <div className="mt-4 space-y-4">
                         {/* Blur Control */}
                         <div>
@@ -651,10 +664,9 @@ const App: React.FC = () => {
                                         onChange={(e) => setSelectedMusicTrack(e.target.value)}
                                         className="w-full bg-stone-800 text-stone-200 text-xs border border-stone-700 rounded px-2 py-1"
                                     >
-                                        <option value="calm-ambient">Ambiente Tranquilo</option>
-                                        <option value="uplifting-piano">Piano Inspirador</option>
-                                        <option value="dramatic-strings">Cuerdas Dramáticas</option>
-                                        <option value="peaceful-meditation">Meditación Pacífica</option>
+                                        {MUSIC_TRACKS.map(track => (
+                                            <option key={track.id} value={track.id}>{track.label}</option>
+                                        ))}
                                     </select>
 
                                     <div>
@@ -743,7 +755,7 @@ const App: React.FC = () => {
             </div>
 
             {/* Main Action Area */}
-            <main className="w-full max-w-4xl flex flex-col items-center gap-8">
+            < main className="w-full max-w-4xl flex flex-col items-center gap-8" >
 
                 {state === AppState.ERROR && (
                     <div className="bg-red-900/20 border border-red-800 text-red-300 p-4 rounded-lg flex items-center gap-3 max-w-md w-full">
@@ -752,49 +764,53 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                {(state === AppState.COMPLETED && currentContent) && (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 w-full flex flex-col items-center gap-4">
-                        <VideoPlayer content={currentContent} />
+                {
+                    (state === AppState.COMPLETED && currentContent) && (
+                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 w-full flex flex-col items-center gap-4">
+                            <VideoPlayer content={currentContent} />
 
-                        {/* Batch Variations Grid */}
-                        {batchResults.length > 0 && (
-                            <div className="w-full max-w-4xl mt-6">
-                                <h3 className="text-sm font-bold text-stone-300 mb-3 flex items-center gap-2">
-                                    🎬 Variaciones Generadas - Click para seleccionar:
-                                </h3>
-                                <div className="grid grid-cols-3 gap-3">
-                                    {batchResults.map((variation, idx) => (
-                                        <button
-                                            key={variation.id}
-                                            onClick={() => setCurrentContent(variation)}
-                                            className={`p-3 rounded-lg border-2 transition ${currentContent.id === variation.id
-                                                ? 'border-purple-500 bg-purple-900/20'
-                                                : 'border-stone-800 bg-stone-900/50 hover:border-stone-700'
-                                                }`}
-                                        >
-                                            <div className="text-xs font-bold text-stone-300 mb-1">
-                                                Variación {idx + 1}
-                                            </div>
-                                            <div className="text-xs text-stone-500">
-                                                {variation.fontFamily}
-                                            </div>
-                                            <div className="text-xs text-stone-600">
-                                                {variation.colorTheme}
-                                            </div>
-                                        </button>
-                                    ))}
+                            {/* Batch Variations Grid */}
+                            {batchResults.length > 0 && (
+                                <div className="w-full max-w-4xl mt-6">
+                                    <h3 className="text-sm font-bold text-stone-300 mb-3 flex items-center gap-2">
+                                        🎬 Variaciones Generadas - Click para seleccionar:
+                                    </h3>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {batchResults.map((variation, idx) => (
+                                            <button
+                                                key={variation.id}
+                                                onClick={() => setCurrentContent(variation)}
+                                                className={`p-3 rounded-lg border-2 transition ${currentContent.id === variation.id
+                                                    ? 'border-purple-500 bg-purple-900/20'
+                                                    : 'border-stone-800 bg-stone-900/50 hover:border-stone-700'
+                                                    }`}
+                                            >
+                                                <div className="text-xs font-bold text-stone-300 mb-1">
+                                                    Variación {idx + 1}
+                                                </div>
+                                                <div className="text-xs text-stone-500">
+                                                    {variation.fontFamily}
+                                                </div>
+                                                <div className="text-xs text-stone-600">
+                                                    {variation.colorTheme}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                    </div>
-                )}
+                            )}
+                        </div>
+                    )
+                }
 
-                {state !== AppState.IDLE && state !== AppState.COMPLETED && state !== AppState.ERROR && (
-                    <div className="flex flex-col items-center gap-4 py-12">
-                        <Loader2 className="w-12 h-12 animate-spin text-amber-500" />
-                        <p className="text-stone-400 font-mono text-sm animate-pulse">{statusText}</p>
-                    </div>
-                )}
+                {
+                    state !== AppState.IDLE && state !== AppState.COMPLETED && state !== AppState.ERROR && (
+                        <div className="flex flex-col items-center gap-4 py-12">
+                            <Loader2 className="w-12 h-12 animate-spin text-amber-500" />
+                            <p className="text-stone-400 font-mono text-sm animate-pulse">{statusText}</p>
+                        </div>
+                    )
+                }
 
                 {/* CONTROLS */}
                 <div className="flex flex-col gap-8 w-full max-w-lg items-center">
@@ -910,24 +926,41 @@ const App: React.FC = () => {
                                 </div>
                                 <div className="flex flex-wrap justify-center gap-2">
                                     <button
-                                        onClick={() => pickRandomTopic(CHRISTIAN_TOPICS)}
-                                        className="px-3 py-1.5 rounded-full text-[10px] font-bold border border-amber-900/50 bg-stone-900 text-amber-600 hover:bg-amber-900/20 hover:text-amber-500 transition-all flex items-center gap-2"
+                                        onClick={fetchAndUseDailyWord}
+                                        className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/50 rounded-full text-[10px] text-amber-200 uppercase tracking-widest font-bold transition flex items-center gap-2"
                                     >
-                                        <Shuffle size={12} />
-                                        Random
+                                        <BookOpen size={12} />
+                                        Palabra del día
                                     </button>
-                                    {CHRISTIAN_TOPICS.map(topic => (
-                                        <button
-                                            key={topic}
-                                            onClick={() => setSelectedTopic(topic)}
-                                            className={`px - 3 py - 1.5 rounded - full text - [10px] font - medium border transition - all ${selectedTopic === topic
-                                                ? 'bg-amber-500 border-amber-400 text-black shadow-[0_0_15px_rgba(245,158,11,0.4)]'
-                                                : 'bg-stone-900 border-stone-800 text-stone-500 hover:border-amber-900/50 hover:text-amber-500/80'
-                                                } `}
-                                        >
-                                            {topic}
-                                        </button>
-                                    ))}
+                                    <button
+                                        onClick={() => fetchVaticanContent('GOSPEL')}
+                                        className="px-3 py-1 bg-red-500/20 hover:bg-red-500/40 border border-red-500/50 rounded-full text-[10px] text-red-200 uppercase tracking-widest font-bold transition flex items-center gap-2"
+                                    >
+                                        <Sparkles size={12} />
+                                        Evangelio
+                                    </button>
+                                    <button
+                                        onClick={() => fetchVaticanContent('READING_1')}
+                                        className="px-3 py-1 bg-blue-500/20 hover:bg-blue-500/40 border border-blue-500/50 rounded-full text-[10px] text-blue-200 uppercase tracking-widest font-bold transition flex items-center gap-2"
+                                    >
+                                        <BookOpen size={12} />
+                                        1ra Lectura
+                                    </button>
+                                    <button
+                                        onClick={() => fetchVaticanContent('READING_2')}
+                                        className="px-3 py-1 bg-indigo-500/20 hover:bg-indigo-500/40 border border-indigo-500/50 rounded-full text-[10px] text-indigo-200 uppercase tracking-widest font-bold transition flex items-center gap-2"
+                                    >
+                                        <BookOpen size={12} />
+                                        2da Lectura
+                                    </button>
+                                    <button
+                                        onClick={() => fetchVaticanContent('PSALM')}
+                                        className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/50 rounded-full text-[10px] text-emerald-200 uppercase tracking-widest font-bold transition flex items-center gap-2"
+                                    >
+                                        <BookOpen size={12} />
+                                        Salmo
+                                    </button>
+                                    {/* Topics Removed per User Request */}
                                 </div>
                             </div>
                         </div>

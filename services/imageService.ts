@@ -136,34 +136,61 @@ export const generateProceduralFallback = async (theme: string): Promise<string>
  */
 export const generateCinematicImage = async (theme: string, iconographyDesc?: string | null): Promise<string> => {
   // 1. Prompt Engineering para Estilo Viral
-  const basePrompt = theme.replace(/[^\w\s]/gi, ''); // Clean chars
-  const isChristian = ['heaven', 'god', 'church', 'cross', 'light', 'jesus', 'bible', 'angel'].some(k => basePrompt.toLowerCase().includes(k));
+  // Fix: Allow Spanish accents in regex (ÁÉÍÓÚñ...)
+  const cleanTheme = theme.replace(/Evangelio del Día.*$/gi, 'Biblical Scene')
+    .replace(/[^\w\s\u00C0-\u00FF,\.-]/gi, '') // Keep accents, commas, dots
+    .substring(0, 150); // Increased context
+
+  // Expanded keywords (English + Spanish)
+  const isChristian = ['heaven', 'god', 'church', 'cross', 'light', 'jesus', 'bible', 'angel', 'cielo', 'dios', 'iglesia', 'cruz', 'luz', 'jesús', 'biblia', 'ángel', 'cristo', 'señor', 'espíritu', 'santo', 'santa', 'virgen', 'maría', 'josé', 'apóstol', 'profeta'].some(k => theme.toLowerCase().includes(k));
 
   let enhancedPrompt = "";
   const seed = Math.floor(Math.random() * 1000000);
 
-  // If we have iconography description, use it to enhance the prompt
+  // If we have iconography description, use it (Truncated but preserving detail)
   if (iconographyDesc) {
+    const desc = iconographyDesc.substring(0, 450).replace(/[^\w\s\u00C0-\u00FF,\.-]/gi, '');
     console.log("🎨 Using iconography description for prompt");
 
     if (isChristian) {
-      enhancedPrompt = `hyperrealistic cinematic portrait, ${iconographyDesc}, divine light rays, heaven atmosphere, renaissance oil painting style, 8k resolution, highly detailed, golden hour lighting, grandeur, epic scale, traditional catholic art, --no text --no watermark --no modern clothing`;
+      enhancedPrompt = `hyperrealistic cinematic portrait, ${desc}, divine light rays, heaven atmosphere, renaissance oil painting style, 8k resolution, highly detailed, golden hour lighting, traditional catholic art, --no text --no watermark --no modern clothing`;
     } else {
-      enhancedPrompt = `dark moody cinematic shot, ${iconographyDesc}, ancient aesthetic, dramatic chiaroscuro lighting, unreal engine 5 render, 8k, sharp focus, stoic atmosphere, --no text --no watermark`;
+      enhancedPrompt = `dark moody cinematic shot, ${desc}, ancient aesthetic, dramatic chiaroscuro lighting, 8k, sharp focus, stoic atmosphere, --no text --no watermark`;
     }
   } else {
-    // Original prompt logic (fallback)
+    // FALLBACK LOGIC (Offline / Quota Exceeded)
+    console.log("⚠️ Using Offline Smart Fallback for Image");
+
+    // 1. Extract known figures manually (since Gemini failed)
+    const t = theme.toLowerCase();
+    let subject = "biblical figure";
+    let extraDetails = "";
+
+    // Mapping Common Figures (Spanish -> English Prompt)
+    if (t.includes('jesús') || t.includes('jesus')) { subject = "Jesus Christ"; extraDetails = "healing, teaching, sacred heart, divine"; }
+    else if (t.includes('maría') || t.includes('maria') || t.includes('virgen')) { subject = "Virgin Mary"; extraDetails = "blue robes, holy mother, immaculate conception"; }
+    else if (t.includes('josé') || t.includes('jose')) { subject = "Saint Joseph"; extraDetails = "carpenter, holy father, lily"; }
+    else if (t.includes('miguel')) { subject = "Archangel Michael"; extraDetails = "armor, sword, wings, warrior angel"; }
+    else if (t.includes('gabriel')) { subject = "Archangel Gabriel"; extraDetails = "messenger, lily, annunciation"; }
+    else if (t.includes('pedro')) { subject = "Saint Peter"; extraDetails = "keys of heaven, fisherman, beard"; }
+    else if (t.includes('pablo')) { subject = "Saint Paul"; extraDetails = "holding sword, scroll, ancient rome background"; }
+    else if (t.includes('juan')) { subject = "Saint John"; extraDetails = "eagle, book, young apostle"; }
+    else if (t.includes('mateo')) { subject = "Saint Matthew"; extraDetails = "angel writing, book, tax collector"; }
+    else if (t.includes('bautista')) { subject = "John the Baptist"; extraDetails = "jordan river, wilderness, camel skin"; }
+    else if (t.includes('espíritu') || t.includes('espiritu')) { subject = "Holy Spirit"; extraDetails = "white dove, flames, rays of light"; }
+    else if (t.includes('ángel') || t.includes('angel')) { subject = "Holy Angel"; extraDetails = "huge white wings, divine light, seraphim"; }
+
     if (isChristian) {
-      enhancedPrompt = `hyperrealistic cinematic shot of ${basePrompt}, divine light rays, heaven gates atmosphere, renaissance oil painting style, 8k resolution, highly detailed, golden hour lighting, grandeur, epic scale, --no text --no watermark`;
+      enhancedPrompt = `hyperrealistic cinematic portrait of ${subject}, ${extraDetails}, ${cleanTheme}, divine light rays, heaven gates atmosphere, renaissance oil painting style, 8k resolution, highly detailed, golden hour lighting, grandeur, epic scale, --no text --no watermark --no modern clothing`;
     } else {
-      // Stoic / Dark
-      enhancedPrompt = `dark moody cinematic shot of ${basePrompt}, ancient greek aesthetic, dramatic chiaroscuro lighting, unreal engine 5 render, 8k, sharp focus, mist and fog, stoic atmosphere, monochrome color grading, --no text --no watermark`;
+      enhancedPrompt = `dark moody cinematic shot of ${cleanTheme}, ancient greek aesthetic, dramatic chiaroscuro lighting, unreal engine 5 render, 8k, sharp focus, mist and fog, stoic atmosphere, monochrome color grading, --no text --no watermark`;
     }
   }
 
   // 2. Pollinations URL (No key required)
   const encodedPrompt = encodeURIComponent(enhancedPrompt);
-  const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1080&height=1920&nologo=true&seed=${seed}&model=flux`;
+  // Use 'turbo' model for speed/reliability. 'flux' caused 502s.
+  const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1080&height=1920&nologo=true&seed=${seed}&model=turbo`;
 
   console.log("🤖 Asking Pollinations AI Image:", imageUrl);
 

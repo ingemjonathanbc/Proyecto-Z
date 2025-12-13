@@ -203,7 +203,7 @@ export class AmbientDrone {
 
     // Master Fade In
     if (this.masterGain) {
-      this.masterGain.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 3);
+      this.masterGain.gain.linearRampToValueAtTime(0.15, this.ctx.currentTime + 3);
     }
 
     this.isPlaying = true;

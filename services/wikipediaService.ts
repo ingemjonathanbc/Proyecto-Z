@@ -11,13 +11,14 @@ interface WikiQuote {
 }
 
 const WIKI_API_BASE = "https://es.wikiquote.org/w/api.php";
+const WIKIPEDIA_API_BASE = "https://es.wikipedia.org/w/api.php";
 
 /**
  * Search for a relevant page on Wikiquote
  */
-const searchWikiPage = async (topic: string): Promise<string | null> => {
+const searchWikiPage = async (topic: string, apiBase: string = WIKI_API_BASE): Promise<string | null> => {
     try {
-        const url = `${WIKI_API_BASE}?action=query&list=search&srsearch=${encodeURIComponent(topic)}&format=json&origin=*`;
+        const url = `${apiBase}?action=query&list=search&srsearch=${encodeURIComponent(topic)}&format=json&origin=*`;
         const res = await fetch(url);
         const data = await res.json();
 
@@ -65,7 +66,7 @@ const extractQuotesFromHTML = (html: string, author: string): string[] => {
 export const getVerifiedWikiQuote = async (topic: string): Promise<WikiQuote | null> => {
     try {
         console.log(`🌐 Searching Internet (Wikiquote) for: ${topic}`);
-        const pageTitle = await searchWikiPage(topic);
+        const pageTitle = await searchWikiPage(topic, WIKI_API_BASE);
 
         if (!pageTitle) {
             console.warn(`❌ No Wikiquote page found for: ${topic}`);
@@ -99,3 +100,37 @@ export const getVerifiedWikiQuote = async (topic: string): Promise<WikiQuote | n
         return null;
     }
 };
+
+/**
+ * Get Wikipedia Summary (Good for definitions or short bios if Quote fails)
+ */
+export const getVerifiedWikipediaSummary = async (topic: string): Promise<WikiQuote | null> => {
+    try {
+        console.log(`🌐 Searching Internet (Wikipedia) for: ${topic}`);
+        const pageTitle = await searchWikiPage(topic, WIKIPEDIA_API_BASE);
+
+        if (!pageTitle) return null;
+
+        const url = `${WIKIPEDIA_API_BASE}?action=query&prop=extracts&exintro&explaintext&titles=${encodeURIComponent(pageTitle)}&format=json&origin=*`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        const pages = data.query.pages;
+        const pageId = Object.keys(pages)[0];
+        const extract = pages[pageId].extract;
+
+        if (extract) {
+            // Cut to reasonable length
+            const shortExtract = extract.split('. ').slice(0, 3).join('. ') + '.';
+            return {
+                text: shortExtract,
+                author: pageTitle,
+                source: "Wikipedia"
+            };
+        }
+        return null;
+    } catch (e) {
+        console.error("Wikipedia Search Error", e);
+        return null;
+    }
+}

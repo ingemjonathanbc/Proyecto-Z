@@ -3,10 +3,11 @@ import { GeneratedContent } from '../types';
 import { getThemeById } from '../config/themes';
 import { decodeAudioData } from '../services/audioService';
 import { AmbientDrone } from '../services/audioService';
-import { convertWebMToMP4, ConversionProgress } from '../services/videoConverter';
+
 import { shareToTwitter, shareToFacebook, shareToWhatsApp, shareToTikTok, generateShareText } from '../services/shareService';
 import { generateShareLink, copyShareLink } from '../services/shareLinkService';
-import { Play, Pause, Download, Loader2, Volume2, VolumeX, RefreshCw, Share2, Link } from 'lucide-react';
+import { MUSIC_TRACKS } from '../config/music';
+import { Play, Pause, Volume2, VolumeX, RefreshCw, Share2, Link } from 'lucide-react';
 
 interface VideoPlayerProps {
   content: GeneratedContent;
@@ -16,6 +17,7 @@ interface WordTiming {
   word: string;
   start: number;
   end: number;
+  index?: number;
 }
 
 interface Particle {
@@ -39,11 +41,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
   // State
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [isRendering, setIsRendering] = useState(false); // For download process
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
   const [hasEnded, setHasEnded] = useState(false);
-  const [isConverting, setIsConverting] = useState(false);
-  const [conversionProgress, setConversionProgress] = useState<ConversionProgress | null>(null);
+
   const [linkCopied, setLinkCopied] = useState(false);
   const activeWordIndexRef = useRef(-1);
   const lastSlideIndexRef = useRef(0);
@@ -56,18 +56,32 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
   const analyserRef = useRef<AnalyserNode | null>(null);
 
   // Recorder Refs
-  const destNodeRef = useRef<MediaStreamAudioDestinationNode | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
+
+  const activeMusicSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   // Animation Refs
   const requestRef = useRef<number>(0);
   const startTimeRef = useRef<number>(0);
   const timingsRef = useRef<WordTiming[]>([]);
+  /* restored */ const audioFinishedRef = useRef(false);
   const particlesRef = useRef<Particle[]>([]);
   const audioBufferRef = useRef<AudioBuffer | null>(null);
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const audioFinishedRef = useRef(false); // Track if audio has ended
+  // Sync Metadata
+  interface SyncMetadata {
+    totalWords: number;
+    titleWords: number;
+    totalDuration: number;
+    isHeuristic: boolean;
+  }
+  const syncMetadataRef = useRef<SyncMetadata>({ totalWords: 0, titleWords: 0, totalDuration: 0, isHeuristic: false });
+  const isMountedRef = useRef(true);
+
+  // Track mount status
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   // Initialize
   useEffect(() => {
@@ -81,7 +95,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
       console.log("🎬 VideoPlayer: Initializing...");
       stopPlayer();
       setHasEnded(false);
-      setIsRendering(false);
+      setHasEnded(false);
+
+      // Reset Ref
+      syncMetadataRef.current = { totalWords: 0, titleWords: 0, totalDuration: 0, isHeuristic: false };
+
 
       // 1. Setup Audio Context
       const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
@@ -93,10 +111,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
       masterGain.connect(ctx.destination);
       masterGainRef.current = masterGain;
 
-      // Destination for Recording
-      const dest = ctx.createMediaStreamDestination();
-      masterGain.connect(dest);
-      destNodeRef.current = dest;
+
 
       // Analyser for Visualizer
       const analyser = ctx.createAnalyser();
@@ -131,13 +146,26 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
         // Preload all images (Standard or Custom Image)
         const promises = content.imageUrls.map(url => {
           return new Promise<HTMLImageElement | null>((resolve) => {
+            console.log("🖼️ Loading Image:", url);
             const img = new Image();
             img.crossOrigin = "anonymous";
             img.src = url;
-            img.onload = () => resolve(img);
-            img.onerror = () => {
-              console.warn("Failed to load image:", url);
-              resolve(null);
+            img.onload = () => {
+              console.log("✅ Image loaded successfully:", url);
+              resolve(img);
+            };
+            img.onerror = (e) => {
+              console.error("❌ Failed to load image:", url, e);
+
+              // Fallback mechanism: Try a generic placeholder if AI fails
+              if (!url.includes('picsum.photos')) {
+                console.warn("🔄 Retrying with fallback placeholder...");
+                img.src = `https://picsum.photos/1080/1920?random=${Math.random()}`;
+                // Remove this error handler to prevent infinite loop if fallback fails
+                img.onerror = () => resolve(null);
+              } else {
+                resolve(null);
+              }
             };
           });
         });
@@ -189,6 +217,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
     if (droneRef.current) {
       droneRef.current.stop();
     }
+    // Hard Stop Explicit Music Source
+    if (activeMusicSourceRef.current) {
+      try { activeMusicSourceRef.current.stop(); } catch (e) { }
+      try { activeMusicSourceRef.current.disconnect(); } catch (e) { }
+      activeMusicSourceRef.current = null;
+    }
 
     // 2. Animation
     if (requestRef.current) {
@@ -197,6 +231,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
 
     // 3. Browser TTS
     window.speechSynthesis.cancel();
+
+    // 4. NUCLEAR OPTION: Suspend Context to guarantee silence
+    // PRO: Kills all audio immediately.
+    // CON: Need to resume if we play again (playSequence handles .resume())
+    if (audioCtxRef.current && audioCtxRef.current.state === 'running') {
+      audioCtxRef.current.suspend();
+    }
 
     setIsPlaying(false);
   };
@@ -217,7 +258,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
   };
 
   const calculateTimings = (duration: number) => {
-    const words = content.quote.text.split(/\s+/);
+    // FIX: Include Title in words array to match Audio (Title + Body)
+    const titleWords = content.quote.title ? content.quote.title.split(/\s+/) : [];
+    const bodyWords = content.quote.text.split(/\s+/);
+    const words = [...titleWords, ...bodyWords];
 
     // 1. Calculate "Virtual Length" of each word
     const virtualLengths = words.map(word => {
@@ -234,8 +278,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
     const totalVirtualLength = virtualLengths.reduce((a, b) => a + b, 0);
 
     // 2. Define "Speech Window" (Exclude entry/exit silence)
-    const startMute = 0.0; // No delay - speech starts immediately
-    const endMute = 0.8; // Reduced for tighter sync at end
+    const startMute = 0.5; // Slight delay for title read
+    const endMute = 0.8;
     const speechDuration = Math.max(1, duration - startMute - endMute);
 
     // 3. Distribute
@@ -248,14 +292,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
       const t = {
         word,
         start: currentTime,
-        end: currentTime + wordDuration
+        end: currentTime + wordDuration,
+        index: i
       };
       currentTime += wordDuration;
       return t;
     });
+
+    // 4. Enable Heuristic Animation
+    syncMetadataRef.current = {
+      totalWords: words.length,
+      titleWords: titleWords.length,
+      totalDuration: duration,
+      isHeuristic: true
+    };
   };
 
-  async function playSequence(isRenderMode = false) {
+  // Stop existing audio
+  const playSequence = async () => {
     const ctx = audioCtxRef.current;
     if (!ctx || !audioBufferRef.current) return;
 
@@ -289,6 +343,65 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
     if (masterGainRef.current) source.connect(masterGainRef.current);
     voiceNodeRef.current = source;
 
+    // --- BACKGROUND MUSIC LOGIC ---
+    const musicTrackId = content.musicTrackId || 'calm-ambient';
+    const trackConfig = MUSIC_TRACKS.find(t => t.id === musicTrackId);
+
+    if (trackConfig?.type === 'file' && trackConfig.path) {
+      console.log(`🎵 Playing Custom File: ${trackConfig.path}`);
+      // Load Audio File
+      // We use fetch + decodeAudioData for best sync/mixing with WebAudio graph
+      fetch(trackConfig.path)
+        .then(response => response.arrayBuffer())
+        .then(arrayBuffer => ctx.decodeAudioData(arrayBuffer))
+        .then(audioBuffer => {
+          const musicSource = ctx.createBufferSource();
+          musicSource.buffer = audioBuffer;
+          musicSource.loop = true;
+          activeMusicSourceRef.current = musicSource;
+
+          // Create separate gain for music volume
+          const musicGain = ctx.createGain();
+          musicGain.gain.value = 0.1; // Reduced to 10% (User req: "30% of previous" or "quiet background")
+
+          musicSource.connect(musicGain);
+          if (masterGainRef.current) musicGain.connect(masterGainRef.current);
+
+          musicSource.start(0);
+          // Store in droneRef as a "hack" to stop it easily later? 
+          // Creating a proper ref would be better but droneRef is standard 'stop()' interface.
+          // But droneRef expects AmbientDrone class... 
+          // Let's attach a "stop" method to an object and store it there?
+          // Or just cast it. 
+          // Better: Create a disposable object that mimics drone interface.
+          droneRef.current = {
+            stop: () => {
+              try { musicSource.stop(); } catch (e) { }
+              musicSource.disconnect();
+              musicGain.disconnect();
+            },
+            start: () => { }, // No-op, already started
+            setupEffectsChain: () => { },
+            createCinematicLayer: () => { },
+            createReeseBass: () => { }
+          } as any;
+        })
+        .catch(err => {
+          console.error("❌ Failed to load music file:", err);
+          // Fallback to drone?
+          droneRef.current?.start(content.quote.category === 'CHRISTIAN' ? 'CHRISTIAN' : 'STOIC');
+        });
+
+    } else {
+      // PROCEDURAL DRONE (Default)
+      console.log("🎹 Playing Procedural Drone");
+      droneRef.current?.start(content.quote.category === 'CHRISTIAN' ? 'CHRISTIAN' : 'STOIC');
+    }
+
+
+
+
+
     // --- LOGIC SPLIT: NATIVE MP3 VS BROWSER SYNTHESIS ---
     if (content.isNativeAudio) {
       console.log("🔊 Playing Native Audio (Google TTS)...");
@@ -314,9 +427,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
 
       if (content.quote?.text && !isMuted) {
         // Include Title and Author in spoken text
+        // Clean Author for Speech (Remove verses like "17, 10-13")
+        let spokenAuthor = content.quote.author || "";
+        spokenAuthor = spokenAuthor.replace(/\s\d+[,:;].*$/, '').trim();
+
         const spokenText = content.quote.title
-          ? `${content.quote.title}. ${content.quote.text}. ${content.quote.author}`
-          : `${content.quote.text}. ${content.quote.author}`;
+          ? `${content.quote.title}. ${content.quote.text}. ${spokenAuthor}`
+          : `${content.quote.text}. ${spokenAuthor}`;
 
         const utterance = new SpeechSynthesisUtterance(spokenText);
 
@@ -393,18 +510,101 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
           };
         });
 
-        timingsRef.current = timeline as any;
-        (timingsRef.current as any).totalWords = totalRenderedWords;
-        (timingsRef.current as any).totalDuration = estimatedDuration;
-        (timingsRef.current as any).isHeuristic = true; // Flag for draw loop
+        // UPDATE HELPER REF WITH BETTER TIMELINE
+        timingsRef.current = timeline;
+
+        // Store metadata for sync calculation
+        syncMetadataRef.current = {
+          totalWords: totalRenderedWords,
+          titleWords: titleArr.length,
+          totalDuration: estimatedDuration,
+          isHeuristic: true
+        };
+
+
+        // --- PRECISE SYNC VIA ONBOUNDARY ---
+        utterance.onboundary = (event) => {
+          if (event.name === 'word') {
+            const charIndex = event.charIndex;
+            // Find which word corresponds to this charIndex
+            // We need to map charIndex back to our 'words' array
+            // Optimization: We could pre-calculate start indices for all words.
+            // For now, let's just loop or find closest.
+
+            // Re-calculate word start indices on the fly or pre-calc? 
+            // Better to match against our 'allWords' array relative to full text string.
+
+            let accumulatedLen = 0;
+            let foundIndex = -1;
+
+            for (let i = 0; i < allWords.length; i++) {
+              // We need to match precise text logic of browser...
+              // Browser counts spaces? Usually yes.
+              // Let's assume sequential mapping is robust enough for now if we track approximate length.
+              // Actually, event.charIndex is absolute position in spokenText.
+
+              // Simple reconstruction of position:
+              // If we just check which word *starts* near this index?
+
+              const wordStart = spokenText.indexOf(allWords[i], accumulatedLen);
+              // Note: indexOf is risky if words repeat. 
+              // Better: maintain running cursor.
+
+              if (wordStart !== -1) {
+                accumulatedLen = wordStart; // Advance cursor
+                // If this word starts at or before the event index, it's a candidate.
+                // But we want the word that *contains* the index.
+
+                if (Math.abs(wordStart - charIndex) < 5) { // Tolerance of 5 chars
+                  foundIndex = i;
+                  break;
+                }
+
+                accumulatedLen += allWords[i].length;
+              }
+            }
+
+            // Fallback: If heuristic failed, just increment? No, sync is better.
+            // Let's try a simpler approach: Just map all start indices once.
+
+            // Map indices for accurate lookup
+            let cursor = 0;
+            const wordIndices = allWords.map((w, i) => {
+              const foundAt = spokenText.indexOf(w, cursor);
+              if (foundAt !== -1) {
+                cursor = foundAt + w.length;
+                return foundAt;
+              }
+              return cursor;
+            });
+
+            // Find closest index <= charIndex
+            const matchIdx = wordIndices.findIndex((idx, i) => {
+              const nextIdx = wordIndices[i + 1] || 999999;
+              return charIndex >= idx && charIndex < nextIdx;
+            });
+
+            if (matchIdx !== -1) {
+              // UPDATE ACTIVE WORD
+              activeWordIndexRef.current = matchIdx;
+
+              // Disable heuristic if we get real events
+              if (syncMetadataRef.current.isHeuristic) {
+                syncMetadataRef.current.isHeuristic = false;
+                // console.log("🔒 Locked to Native Browser Sync (onboundary events detected)");
+              }
+            }
+          }
+        };
 
         // --- AUTO-STOP ON SPEECH END ---
         utterance.onend = () => {
+          // ... (existing end logic) ...
           const actualDuration = audioCtxRef.current ? (audioCtxRef.current.currentTime - startTimeRef.current) : estimatedDuration;
           console.log(`🎤 Audio Finished. Estimated: ${estimatedDuration.toFixed(2)}s, Actual: ${actualDuration.toFixed(2)}s`);
 
-          // Update metadata with ACTUAL duration for accurate final frame calculations
-          (timingsRef.current as any).totalDuration = actualDuration;
+          // Update metadata into syncMetadata for final stats if needed
+          syncMetadataRef.current.totalDuration = actualDuration;
 
           // CRITICAL: Set flag FIRST to prevent drawFrame from recalculating
           audioFinishedRef.current = true;
@@ -412,15 +612,38 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
           activeWordIndexRef.current = totalRenderedWords - 1;
 
           setTimeout(() => {
-            if (voiceNodeRef.current) { try { voiceNodeRef.current.stop() } catch (e) { } }
-            setIsPlaying(false);
+            console.log("🛑 Finalizing Video: Calling stopPlayer()");
+            stopPlayer();
             setHasEnded(true);
-            if (droneRef.current) droneRef.current.stop();
-            cancelAnimationFrame(requestRef.current);
-          }, 800); // Increased to 800ms to clearly show last word
+          }, 800);
         };
 
+        // GC Prevention
+        (window as any).currentUtterance = utterance;
+
         window.speechSynthesis.speak(utterance);
+
+        // SAFETY NET: Force stop if onend fails (or if Browser TTS hangs)
+        // Add LARGE buffer (60s) to avoid cutting off early if TTS is slow.
+        // The primary stop signal is 'onend' (when voice actually stops).
+        const safetyDuration = (estimatedDuration + 60) * 1000;
+        console.log(`⏱️ Setting Safety Stop in ${safetyDuration}ms`);
+
+        setTimeout(() => {
+          if (!audioFinishedRef.current && isPlaying) {
+            console.warn("⚠️ Safety Timeout triggered! Force-ending video.");
+            // Manually trigger cleanup
+            audioFinishedRef.current = true;
+            if (utterance.onend) utterance.onend(new Event('end') as any);
+          }
+        }, safetyDuration);
+
+        // Update fallback buffer to match the generous safety duration
+        // This prevents drawFrame from killing the loop early (elapsed > duration check)
+        if (audioBufferRef.current && audioCtxRef.current) {
+          const newBuffer = audioCtxRef.current.createBuffer(2, audioCtxRef.current.sampleRate * (estimatedDuration + 60), audioCtxRef.current.sampleRate);
+          audioBufferRef.current = newBuffer;
+        }
       }
     }
     source.start(0);
@@ -434,14 +657,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
       const elapsed = ctx.currentTime - startTimeRef.current;
 
       // Check End
-      if (elapsed > audioBufferRef.current!.duration + 1) {
-        if (isRenderMode) {
-          stopRecording();
-        } else {
-          setIsPlaying(false);
-          setHasEnded(true);
-          if (droneRef.current) droneRef.current.stop();
+
+      // POLLING SYNC: If using Browser TTS, check if speaking has stopped
+      if (!content.isNativeAudio && elapsed > 2 && !window.speechSynthesis.speaking && !audioFinishedRef.current) {
+        console.log("🗣️ Polling detected speech end.");
+        audioFinishedRef.current = true;
+        if ((window as any).currentUtterance?.onend) {
+          (window as any).currentUtterance.onend(new Event('end'));
         }
+      }
+
+      if (elapsed > audioBufferRef.current!.duration + 1) {
+        setIsPlaying(false);
+        setHasEnded(true);
+        if (droneRef.current) droneRef.current.stop();
         return;
       }
 
@@ -485,17 +714,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
     const totalDuration = audioBufferRef.current?.duration || 10;
 
     // --- HEURISTIC SYNC UPDATE ---
-    if (!audioFinishedRef.current && timingsRef.current && (timingsRef.current as any).isHeuristic) {
-      const timeline = timingsRef.current as any as { start: number, end: number, index: number }[];
+    if (!audioFinishedRef.current && timingsRef.current && syncMetadataRef.current.isHeuristic) {
+      const timeline = timingsRef.current;
 
       // Find current word based on elapsed time
       const found = timeline.find(t => elapsed >= t.start && elapsed < t.end);
 
-      if (found) {
+      if (found && found.index !== undefined) {
         activeWordIndexRef.current = found.index;
       } else if (timeline.length > 0 && elapsed >= timeline[timeline.length - 1].end) {
         // If past the end, clamp to last word
-        activeWordIndexRef.current = timeline[timeline.length - 1].index;
+        const last = timeline[timeline.length - 1];
+        if (last.index !== undefined) activeWordIndexRef.current = last.index;
       }
     }
 
@@ -596,8 +826,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
 
     // 6. Visualizer & Progress
     drawVisualizer(ctx);
-    drawProgressBar(ctx, elapsed, totalDuration);
-    drawCTA(ctx, elapsed, totalDuration);
+
+    // UI Duration: Use the ESTIMATED Speech duration (syncMetadata) so the bar feels accurate (0-100%)
+    // The totalDuration (buffer) is huge (+60s) for safety, so using it makes the bar look stuck at 30%.
+    const uiDuration = (syncMetadataRef.current && syncMetadataRef.current.totalDuration > 0)
+      ? syncMetadataRef.current.totalDuration
+      : totalDuration;
+
+    drawProgressBar(ctx, elapsed, uiDuration);
+    drawCTA(ctx, elapsed, uiDuration);
 
     // 7. Safe Zone Overlay (Debug Guide)
     // TikTok UI: Right side buttons, Bottom description
@@ -607,20 +844,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
     // Let's add a visual guide that flashes briefly at start or safe area borders.
     // Actually, user asked for "Option to see". For simplicity, let's draw it faint if not rendering.
 
-    if (!isRendering && elapsed < 2) { // Show guide for first 2 seconds as check
-      ctx.save();
-      ctx.strokeStyle = "rgba(0, 255, 0, 0.3)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([10, 10]);
-      // Safe Area Rect (approx TikTok safe zone)
-      // Top: 100px clear, Bottom: 200px clear, Sides: 20px clear, Right: 80px clear
-      ctx.strokeRect(20, 100, CANVAS_WIDTH - 100, CANVAS_HEIGHT - 350);
 
-      ctx.fillStyle = "rgba(0, 255, 0, 0.5)";
-      ctx.font = "10px sans-serif";
-      ctx.fillText("SAFE ZONE", 30, 115);
-      ctx.restore();
-    }
 
     // 8. Branding/Title Overlay (Fades out)
     if (elapsed < 3) {
@@ -747,10 +971,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
     // Debug info on screen (temporary)
     // ctx.fillText(`Idx: ${activeIdx}`, 50, 50);
 
-    // Handle end of stream holding (keep last word lit)
-    if (activeIdx >= words.length) {
-      activeIdx = words.length - 1;
-    }
+    // Clamping logic is already handled in drawFrame (timeline end)
+    // Legacy clamping here was comparing GlobalIndex vs BodyLength, which caused premature stopping.
+    // REMOVED.
 
     // setActiveWordIndex(activeIdx); // No need to trigger re-renders, purely canvas driven
 
@@ -792,140 +1015,203 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
     // If global index >= titleLength, we are in body (shifted by titleLength).
 
     const globalIndex = activeIdx;
-    const isTitleActive = titleLength > 0 && globalIndex < titleLength;
-    const bodyActiveIndex = globalIndex - titleLength; // Negative if in title
+    // --- UNIFIED SCROLLING LOGIC ---
+    // 1. Measure Title Layout
+    let titleLines: string[] = [];
+    if (content.quote.title) {
+      const tWords = content.quote.title.split(/\s+/);
+      let tLine = '';
+      ctx.font = `bold 40px ${fontName}`; // Title Font
 
-    // --- DRAW TITLE (IF PRESENT) ---
-    let titleOffset = 0; // To push body text down if title is present
-
-    if (content.quote.title && elapsed > 0.5) {
-      ctx.save();
-      const titleFont = "bold 42px 'Anton', sans-serif";
-      ctx.font = titleFont;
-      ctx.fillStyle = "#fbbf24"; // Gold color
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.shadowColor = "rgba(0,0,0,0.8)";
-      ctx.shadowBlur = 10;
-
-      const titleWords = content.quote.title.toUpperCase().split(' ');
-      let titleLine = '';
-      const titleLines = [];
-      const titleMaxWidth = CANVAS_WIDTH - 60; // Padding
-
-      for (let n = 0; n < titleWords.length; n++) {
-        const testLine = titleLine + titleWords[n] + ' ';
+      for (let n = 0; n < tWords.length; n++) {
+        const testLine = tLine + tWords[n] + ' ';
         const metrics = ctx.measureText(testLine);
-        if (metrics.width > titleMaxWidth && n > 0) {
-          titleLines.push(titleLine);
-          titleLine = titleWords[n] + ' ';
+        // Slightly tighter width for title
+        if (metrics.width > maxWidth && n > 0) {
+          titleLines.push(tLine);
+          tLine = tWords[n] + ' ';
         } else {
-          titleLine = testLine;
+          tLine = testLine;
         }
       }
-      titleLines.push(titleLine);
+      titleLines.push(tLine);
+    }
+    const titleLineHeight = 46;
+    const titleTotalHeight = titleLines.length * titleLineHeight;
+    const titleMarginBottom = 40;
 
-      // Draw title lines
-      let titleY = 100; // Start Y
-      const titleLineHeight = 46;
+    // 2. Measure Body Layout
+    ctx.font = `${fontSize}px ${fontName}`;
+    // 2. Measure Body Layout (Paragraph-Aware)
+    ctx.font = `${fontSize}px ${fontName}`;
 
-      titleLines.forEach((line) => {
-        ctx.fillText(line.trim(), CANVAS_WIDTH / 2, titleY);
-        titleY += titleLineHeight;
+    // Split by newlines to preserve paragraph structure
+    // This allows us to detect "Headers" (short paragraphs) and center them.
+    const paragraphs = content.quote.text.split(/\n+/);
+
+    let bodyLines: { text: string, isHeader: boolean, words: { text: string, index: number }[] }[] = [];
+    let wordGlobalIndex = 0; // Relative to Body Start
+
+    paragraphs.forEach(para => {
+      const paraWords = para.trim().split(/\s+/);
+      if (paraWords.length === 0 || (paraWords.length === 1 && paraWords[0] === '')) return;
+
+      // Heuristic: Is this a Header?
+      // 1. Explicit "Reflexión"
+      // 2. Short line (< 50 chars) but not *too* short to be just a hanging word, 
+      //    actually short *standalone* paragraphs are usually headers in this context.
+      //    Let's say char count < 60.
+      const isHeader = para.length < 60 || para.trim().toLowerCase().includes('reflexión');
+
+      let line = '';
+      let currentLineWords: { text: string, index: number }[] = [];
+
+      paraWords.forEach((word, i) => {
+        const testLine = line + word + ' ';
+        const metrics = ctx.measureText(testLine);
+
+        if (metrics.width > maxWidth && i > 0) {
+          bodyLines.push({ text: line, isHeader, words: currentLineWords });
+          line = word + ' ';
+          currentLineWords = [{ text: word, index: wordGlobalIndex++ }];
+        } else {
+          line = testLine;
+          currentLineWords.push({ text: word, index: wordGlobalIndex++ });
+        }
+      });
+      // Push remaining line of paragraph
+      if (line.trim().length > 0) {
+        bodyLines.push({ text: line, isHeader, words: currentLineWords });
+      }
+    });
+
+    const bodyLineHeight = lineHeight;
+
+
+    // 3. Find Active Line (Global context including Title)
+    // We assume 'activeIdx' tracks ALL words (Title + Body).
+    // Need to correctly map activeIdx to lines.
+
+    let activeYCenter = 0;
+
+    // We need to count Title words to map the global index correctly
+    const titleWordCount = content.quote.title ? content.quote.title.split(/\s+/).filter(w => w.length > 0).length : 0;
+    // Actually, splitting by regex might differ slightly from the render split if we aren't careful, 
+    // but usually 'words' array in layout matches 'words' array in timing.
+    // Let's assume titleWords + bodyWords match the global 'activeIdx'.
+
+    let isTitleActive = false;
+    let titleActiveLineIndex = 0;
+    let bodyActiveLineIndex = 0;
+
+    if (activeIdx < titleWordCount) {
+      // Active word is inside Title
+      isTitleActive = true;
+      // Find which title line it falls into? 
+      // We didn't map word indices to titleLines above. Let's look up roughly.
+      // Simple approximation: word per line average? No, let's map it properly or default to center.
+      // For simplicity: If in title, center the Title Block or specific line.
+      // Let's map it:
+      let wCount = 0;
+      for (let l = 0; l < titleLines.length; l++) {
+        const lWords = titleLines[l].trim().split(/\s+/).length;
+        if (activeIdx < (wCount + lWords)) {
+          titleActiveLineIndex = l;
+          break;
+        }
+        wCount += lWords;
+      }
+      activeYCenter = (titleActiveLineIndex * titleLineHeight) + (titleLineHeight / 2);
+
+    } else {
+      // Active word is inside Body
+      // Adjust index relative to Body
+      const bodyLocalIdx = activeIdx - titleWordCount;
+
+      bodyLines.forEach((l, idx) => {
+        const firstWordIdx = l.words[0]?.index || 0;
+        const lastWordIdx = l.words[l.words.length - 1]?.index || 0;
+        if (bodyLocalIdx >= firstWordIdx && bodyLocalIdx <= lastWordIdx) {
+          bodyActiveLineIndex = idx;
+        }
       });
 
-      titleOffset = (titleLines.length * titleLineHeight) + 20; // Padding
+      // Y Position relative to Block Start:
+      // Title Height + Margin + (BodyLines * Height)
+      activeYCenter = titleTotalHeight + titleMarginBottom + (bodyActiveLineIndex * bodyLineHeight) + (bodyLineHeight / 2);
+    }
+
+
+    // 4. Calculate Master Offset
+    // We want 'activeYCenter' to be at CANVAS_HEIGHT / 2
+    const targetBlockStartY = (CANVAS_HEIGHT / 2) - activeYCenter;
+
+    // Smooth scroll? We can lerp this if we had a ref, but direct calc is snappy and fine for TTS.
+    let currentY = targetBlockStartY;
+
+
+    // 5. Draw TITLE
+    if (content.quote.title && elapsed > 0.5) { // Only show title after 0.5s
+      ctx.save();
+      ctx.font = `bold 40px ${fontName}`;
+      ctx.fillStyle = "#fbbf24"; // Gold color
+      ctx.shadowColor = "rgba(0,0,0,0.8)";
+      ctx.shadowBlur = 4;
+
+      titleLines.forEach((tLine, i) => {
+        const lineY = currentY + (i * titleLineHeight);
+        // Optimization: Skip off-screen
+        if (lineY > -50 && lineY < CANVAS_HEIGHT + 50) {
+          ctx.fillText(tLine.trim(), CANVAS_WIDTH / 2, lineY);
+        }
+      });
       ctx.restore();
     }
 
-    // --- MAIN TEXT ---
-    // Ensure main font is set back for measurements
+    // 6. Draw BODY
+    currentY += titleTotalHeight + titleMarginBottom;
+
+    // Reset Context for Body
     ctx.font = `${fontSize}px ${fontName}`;
+    const bodyActiveIndex = activeIdx - titleWordCount; // For word highlighting logic
 
-    // Adjust startY based on title
-    // If title exists, we might need to push startY down or ensure it flows
-    // Original startY was Center (CANVAS_HEIGHT / 2).
-    // Let's rely on scroll logic for long text, but for layout:
-    // If title takes space at top, the "Center" might need to be effectively lower?
-    // Actually, the main text scroll logic centers the *active line*.
-    // We just need to make sure we don't draw ON TOP of the title.
-    // The main text runs in a scroll block. 
-    // Let's just trust separate layer rendering, but maybe we can warn if body is too high?
-    // For now, let's just wrap the title. The body text autoscrolls so it should be fine.
-
-    // Word Wrapping Logic
-    let line = '';
-    let lines: { text: string, words: { text: string, index: number }[] }[] = [];
-    let currentLineWords: { text: string, index: number }[] = [];
-    let wordGlobalIndex = 0; // Relative to Body Start
-
-    for (let i = 0; i < words.length; i++) {
-      // ... (existing wrapping logic) ...
-      // We reconstruct the loop to ensure clean indexing
-      const testLine = line + words[i] + ' ';
-      const metrics = ctx.measureText(testLine);
-      if (metrics.width > maxWidth && i > 0) {
-        lines.push({ text: line, words: currentLineWords });
-        line = words[i] + ' ';
-        currentLineWords = [{ text: words[i], index: wordGlobalIndex++ }];
-      } else {
-        line = testLine;
-        currentLineWords.push({ text: words[i], index: wordGlobalIndex++ });
-      }
-    }
-    lines.push({ text: line, words: currentLineWords });
-
-    // Draw Lines
-    const totalLines = lines.length;
-    const totalTextHeight = totalLines * lineHeight;
-
-    // SCROLLING LOGIC (Teleprompter / Karaoke Scroll)
-    let blockStartOffsetY = CANVAS_HEIGHT / 2;
-
-    // Sync Scroll to BODY Index
-    if (totalTextHeight > (CANVAS_HEIGHT - 300)) {
-      // Only scroll if we are actually IN the body
-      if (bodyActiveIndex >= 0) {
-        let activeLineIndex = 0;
-        lines.forEach((l, idx) => {
-          const firstWordIdx = l.words[0]?.index || 0;
-          const lastWordIdx = l.words[l.words.length - 1]?.index || 0;
-          if (bodyActiveIndex >= firstWordIdx && bodyActiveIndex <= lastWordIdx) {
-            activeLineIndex = idx;
-          }
-        });
-        const targetBlockTop = (CANVAS_HEIGHT / 2) - (activeLineIndex * lineHeight) - (lineHeight / 2);
-        blockStartOffsetY = targetBlockTop;
-      } else {
-        // If in title, show start of body
-        blockStartOffsetY = (CANVAS_HEIGHT / 2) - (0 * lineHeight) - (lineHeight / 2);
-      }
-    } else {
-      blockStartOffsetY = (CANVAS_HEIGHT / 2) - (totalTextHeight / 2);
-    }
-
-    // Draw
-    lines.forEach((lineObj, lineIdx) => {
-      const lineY = blockStartOffsetY + (lineIdx * lineHeight);
+    // Iterate Body Lines
+    bodyLines.forEach((lineObj, lineIdx) => {
+      const lineY = currentY + (lineIdx * bodyLineHeight);
       if (lineY < -100 || lineY > CANVAS_HEIGHT + 100) return;
 
-      ctx.font = `${fontSize}px ${fontName}`;
+      // Apply Header Styles if detected
+      if (lineObj.isHeader) {
+        ctx.font = `bold ${fontSize + 4}px ${fontName}`;
+        // ctx.fillStyle = "#fbbf24"; // Gold for headers? Valid, but individual words draw over it.
+        // Note: The loop below draws individual words. We need to tell the word-drawer to use Gold?
+        // Or just rely on font weight.
+      } else {
+        ctx.font = `${fontSize}px ${fontName}`;
+      }
+
+      // Recalculate width with potentially new font
       let lineWidth = ctx.measureText(lineObj.text.trim()).width;
       let currentX = (CANVAS_WIDTH / 2) - (lineWidth / 2);
 
       lineObj.words.forEach(w => {
-        // CRITICAL FIX: Compare against bodyActiveIndex instead of global activeIdx
-        const isActive = bodyActiveIndex >= 0 && w.index === bodyActiveIndex;
-        const isPast = bodyActiveIndex >= 0 && w.index < bodyActiveIndex;
+        // Restore Logic for highlighting
+        const isActive = (bodyActiveIndex >= 0) && (w.index === bodyActiveIndex);
+        // "Past" if we are past this word's index OR if we are past the entire body (e.g. in author phase)
+        const isPast = (bodyActiveIndex >= 0 && w.index < bodyActiveIndex) || (activeIdx >= (syncMetadataRef.current?.totalWords || 99999));
 
+        // Override color for Headers if not active/highlighted
+        // Actually, semantic coloring logic overrides this.
+        // Let's modify the default wordColor in the loop.
 
-        ctx.font = `${fontSize}px ${fontName}`;
+        ctx.font = lineObj.isHeader ? `bold ${fontSize + 4}px ${fontName}` : `${fontSize}px ${fontName}`;
         const standardMetrics = ctx.measureText(w.text + " ");
         const wordWidth = standardMetrics.width;
 
         // --- SEMANTIC COLORING ---
         const lowerText = w.text.toLowerCase();
-        let wordColor = "#ffffff"; // Default white
+        let wordColor = "#ffffff";
+        if (lineObj.isHeader) wordColor = "#fbbf24"; // Force Gold for Headers (unless semantic overrides?)
         let glowColor = "rgba(255, 255, 255, 0.5)";
 
         // 1. DANGER / DEATH (Red)
@@ -960,7 +1246,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
           // Massive Pop
           const scale = isPowerWord ? 1.7 : 1.5;
           ctx.scale(scale, scale);
-          ctx.rotate((Math.random() - 0.5) * 0.1); // Jitter
+          // ctx.rotate((Math.random() - 0.5) * 0.1); // Jitter REMOVED per user request
 
           if (isPowerWord) {
             // 1. Cyan Layer (Offset Left)
@@ -1006,13 +1292,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
 
     // Author - Position at bottom of the block
     if (elapsed > 1) {
-      ctx.font = "16px sans-serif";
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      const text = "ESCRIBE 'AMEN' Y COMPARTE LA PALABRA DEL SEÑOR";
+      ctx.font = "bold 24px sans-serif";
+      ctx.fillStyle = "#ffffff";
       // Calc bottom of block
-      const blockBottomY = blockStartOffsetY + totalTextHeight;
+      // Calc bottom of block (currentY is the start of body lines)
+      const blockBottomY = currentY + (bodyLines.length * bodyLineHeight);
       // Ensure Author is at least visible if scrolling.
-      // If scrolling, blockStartOffsetY moves up, so author moves up with it.
-      // This is correct behavior (scrolling up).
       ctx.fillText(content.quote.author.toUpperCase(), CANVAS_WIDTH / 2, blockBottomY + 40);
     }
   };
@@ -1050,23 +1336,26 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
 
     const y = CANVAS_HEIGHT / 2 + 250; // Moved lower to avoid covering text
 
-    // Background pill
+    // Background pill (Taller for stacked text)
     ctx.fillStyle = "rgba(0,0,0,0.7)";
     ctx.beginPath();
-    // Simple rect fallback for canvas
-    ctx.roundRect(CANVAS_WIDTH / 2 - 150, y - 25, 300, 50, 25);
+    ctx.roundRect(CANVAS_WIDTH / 2 - 250, y - 40, 500, 80, 25);
     ctx.fill();
 
     // Text
-    ctx.font = "bold 24px 'Inter', sans-serif";
     ctx.textAlign = "center";
     ctx.fillStyle = "#ffffff";
 
-    const ctaText = content.quote.category === 'CHRISTIAN'
-      ? "👉 ESCRIBE 'AMEN'"
-      : "👉 SÍGUEME PARA MÁS";
+    if (content.quote.category === 'CHRISTIAN') {
+      ctx.font = "bold 24px 'Inter', sans-serif";
+      ctx.fillText("👉 ESCRIBE 'AMEN'", CANVAS_WIDTH / 2, y - 5);
 
-    ctx.fillText(ctaText, CANVAS_WIDTH / 2, y + 8);
+      ctx.font = "bold 16px 'Inter', sans-serif";
+      ctx.fillText("Y COMPARTE LA PALABRA DEL SEÑOR", CANVAS_WIDTH / 2, y + 20);
+    } else {
+      ctx.font = "bold 24px 'Inter', sans-serif";
+      ctx.fillText("👉 SÍGUEME PARA MÁS", CANVAS_WIDTH / 2, y + 8);
+    }
 
     ctx.restore();
   };
@@ -1113,118 +1402,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
     }
   };
 
-  const handleDownloadVideo = () => {
-    if (isRendering || !canvasRef.current || !destNodeRef.current) return;
 
-    setIsRendering(true);
-    recordedChunksRef.current = [];
-
-    const canvasStream = canvasRef.current.captureStream(30);
-    const audioStream = destNodeRef.current.stream;
-
-    const combinedStream = new MediaStream([
-      ...canvasStream.getVideoTracks(),
-      ...audioStream.getAudioTracks()
-    ]);
-
-    const options = { mimeType: 'video/webm; codecs=vp9' };
-    try {
-      const recorder = new MediaRecorder(combinedStream, options);
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `stoicbot - ${content.id}.webm`;
-        a.click();
-        setIsRendering(false);
-        playSequence();
-      };
-
-      recorder.start();
-      playSequence(true);
-    } catch (e) {
-      console.error("Recorder error", e);
-      setIsRendering(false);
-      alert("Recording not supported in this browser.");
-    }
-  };
-
-  const handleDownloadMP4 = async () => {
-    if (isRendering || isConverting || !canvasRef.current || !destNodeRef.current) return;
-
-    try {
-      setIsRendering(true);
-      setConversionProgress({ progress: 0, stage: 'Preparing...' });
-      recordedChunksRef.current = [];
-
-      const canvasStream = canvasRef.current.captureStream(30);
-      const audioStream = destNodeRef.current.stream;
-
-      const combinedStream = new MediaStream([
-        ...canvasStream.getVideoTracks(),
-        ...audioStream.getAudioTracks()
-      ]);
-
-      const options = { mimeType: 'video/webm; codecs=vp9' };
-      const recorder = new MediaRecorder(combinedStream, options);
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = async () => {
-        try {
-          const webmBlob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-          setIsRendering(false);
-          setIsConverting(true);
-
-          // Convert to MP4
-          const mp4Blob = await convertWebMToMP4(webmBlob, (progress) => {
-            setConversionProgress(progress);
-          });
-
-          // Download
-          const url = URL.createObjectURL(mp4Blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `stoicbot-${content.id}.mp4`;
-          a.click();
-          URL.revokeObjectURL(url);
-
-          setIsConverting(false);
-          setConversionProgress(null);
-          playSequence();
-        } catch (error) {
-          console.error('MP4 conversion failed:', error);
-          setIsConverting(false);
-          setConversionProgress(null);
-          alert('Failed to convert to MP4. Try WebM download instead.');
-        }
-      };
-
-      recorder.start();
-      playSequence(true);
-    } catch (e) {
-      console.error("MP4 Recording error", e);
-      setIsRendering(false);
-      setIsConverting(false);
-      alert("MP4 recording not supported in this browser.");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-  };
 
   return (
     <div className="flex flex-col gap-4 items-center">
@@ -1237,8 +1415,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
           className="w-full h-full object-contain bg-black"
         />
 
-        {/* Overlay Controls */}
-        {!isRendering && (
+        {/* Overlay Controls */}{
           <div className="absolute inset-0 flex flex-col justify-between p-4 bg-black/0 hover:bg-black/20 transition-all group">
             <div className="flex justify-end">
               <button onClick={toggleMute} className="p-2 bg-black/40 backdrop-blur rounded-full text-white/80 hover:text-white">
@@ -1262,59 +1439,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
               </div>
             )}
           </div>
-        )}
+        }
 
-        {isRendering && (
-          <div className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center text-white">
-            <Loader2 className="animate-spin mb-4" size={40} />
-            <p className="font-serif text-lg">Rendering Video...</p>
-            <p className="text-xs text-stone-400 mt-2">Please wait while we record pixel-perfect quality.</p>
-          </div>
-        )}
+
       </div>
 
-      {/* Action Bar */}
-      <div className="flex flex-col gap-3">
-        <div className="flex gap-3">
-          <button
-            onClick={handleDownloadVideo}
-            disabled={isRendering || isConverting}
-            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-stone-100 hover:bg-white text-stone-900 rounded-full font-bold shadow-lg transition active:scale-95 disabled:opacity-50"
-          >
-            {isRendering && !isConverting ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
-            <span>WebM</span>
-          </button>
 
-          <button
-            onClick={handleDownloadMP4}
-            disabled={isRendering || isConverting}
-            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full font-bold shadow-lg transition active:scale-95 disabled:opacity-50"
-          >
-            {isConverting ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
-            <span>MP4</span>
-          </button>
-        </div>
-
-        {/* Conversion Progress */}
-        {conversionProgress && (
-          <div className="bg-stone-900 rounded-lg p-3 border border-stone-800">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-stone-400">{conversionProgress.stage}</span>
-              <span className="text-xs font-bold text-purple-400">{conversionProgress.progress}%</span>
-            </div>
-            <div className="h-2 bg-stone-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all duration-300"
-                style={{ width: `${conversionProgress.progress}%` }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      <p className="text-xs text-stone-500 max-w-md text-center">
-        *WebM: Mejor calidad, compatible con redes sociales. MP4: Conversión automática para máxima compatibilidad.
-      </p>
 
       {/* Social Share Buttons */}
       <div className="flex flex-col items-center gap-3 pt-4 border-t border-stone-800/50">
@@ -1391,6 +1521,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ content }) => {
         )}
       </div>
     </div>
+
   );
 };
 

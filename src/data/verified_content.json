@@ -41,9 +41,9 @@
             "source": "Credo de los Apóstoles"
         },
         "SALVE REGINA": {
-            "text": "Dios te salve, Reina y Madre de misericordia, vida, dulzura y esperanza nuestra; Dios te salve. A ti llamamos los desterrados hijos de Eva; a ti suspiramos, gimiendo y llorando en este valle de lágrimas. Ea, pues, Señora, abogada nuestra, vuelve a nosotros esos tus ojos misericordiosos; y después de este destierro muéstranos a Jesús, fruto bendito de tu vientre. ¡Oh clemente, oh piadosa, oh dulce siempre Virgen María! Ruega por nosotros, Santa Madre de Dios, para que seamos dignos de alcanzar las promesas de Nuestro Señor Jesucristo. Amén.",
+            "text": "Dios te salve, Reina y Madre de misericordia, vida, dulzura y esperanza nuestra; Dios te salve. A ti llamamos los desterrados hijos de Eva; a ti suspiramos, gimiendo y llorando en este valle de lágrimas. Ea, pues, Señora, abogada nuestra, vuelve a nosotros esos tus ojos misericordiosos; y después de este destierro muéstranos a Jesús, fruto bendito de tu vientre. ¡Oh clementísima, oh piadosa, oh dulce siempre Virgen María! Ruega por nosotros, Santa Madre de Dios, para que seamos dignos de alcanzar las promesas de Nuestro Señor Jesucristo. Amén.",
             "author": "Iglesia Católica",
-            "source": "Oración Mariana Tradicional"
+            "source": "Salve Regina - webcatolicodejavier.org"
         },
         "GLORIA": {
             "text": "Gloria al Padre, y al Hijo, y al Espíritu Santo. Como era en el principio, ahora y siempre, por los siglos de los siglos. Amén.",
@@ -51,9 +51,9 @@
             "source": "Doxología Menor"
         },
         "ANGEL DE LA GUARDA": {
-            "text": "Ángel de mi guarda, dulce compañía, no me desampares ni de noche ni de día, hasta que me entregues en los brazos de Jesús, José y María. Con Dios me acuesto, con Dios me levanto, con la Virgen María y el Espíritu Santo. Amén.",
+            "text": "Ángel de mi guarda, dulce compañía, no me desampares ni de noche ni de día. No me dejes solo, que me perdería. Hasta que me entregues en los brazos de Jesús, José y María. Amén.",
             "author": "Tradición Católica",
-            "source": "Oración al Ángel Custodio"
+            "source": "Oración al Ángel Custodio - webcatolicodejavier.org"
         },
         "YO CONFIESO": {
             "text": "Yo confieso ante Dios todopoderoso, y ante ustedes, hermanos, que he pecado mucho de pensamiento, palabra, obra y omisión. Por mi culpa, por mi culpa, por mi gran culpa. Por eso ruego a santa María, siempre Virgen, a los ángeles, a los santos y a ustedes, hermanos, que intercedan por mí ante Dios, nuestro Señor. Amén.",
@@ -64,6 +64,36 @@
             "text": "Señor mío, Jesucristo, Dios y Hombre verdadero, Creador, Padre y Redentor mío; por ser Tú quien eres y porque te amo sobre todas las cosas, me pesa de todo corazón haberte ofendido; propongo firmemente nunca más pecar, apartarme de todas las ocasiones de ofenderte, confesarme y cumplir la penitencia que me fuera impuesta. Amén.",
             "author": "Iglesia Católica",
             "source": "Oración de Penitencia"
+        },
+        "JESUS CRUCIFICADO": {
+            "text": "Mírame, ¡oh mi amado y buen Jesús!, postrado en tu divina presencia te ruego, con el mayor fervor, imprimas en mi corazón vivos sentimientos de fe, esperanza y caridad, verdadero dolor de mis pecados y firmísimo propósito de jamás ofenderte; mientras que yo, con el mayor afecto y compasión de que soy capaz, voy considerando y contemplando tus cinco llagas, teniendo presente lo que de Ti, oh buen Jesús, dijo el profeta David: 'Han taladrado mis manos y mis pies y se pueden contar todos mis huesos.'",
+            "author": "Tradición Católica",
+            "source": "Oración ante Cristo Crucificado"
+        },
+        "CREDO DE NICEA": {
+            "text": "Creo en un solo Dios, Padre todopoderoso, creador del cielo y de la tierra, de todo lo visible y lo invisible. Creo en un solo Señor, Jesucristo, Hijo único de Dios, nacido antes de todos los siglos: Dios de Dios, Luz de Luz, Dios verdadero de Dios verdadero, engendrado, no creado, de la misma naturaleza del Padre, por quien todo fue hecho; que por nosotros los hombres y por nuestra salvación bajó del cielo, y por obra del Espíritu Santo se encarnó de María, la Virgen, y se hizo hombre; y por nuestra causa fue crucificado en tiempos de Poncio Pilato; padeció y fue sepultado, y resucitó al tercer día según las Escrituras, y subió al cielo, y está sentado a la derecha del Padre; y de nuevo vendrá con gloria para juzgar a vivos y muertos, y su reino no tendrá fin. Creo en el Espíritu Santo, Señor y dador de Vida, que procede del Padre y del Hijo, que con el Padre y el Hijo reciben una misma adoración y gloria. Y que habló por los profetas. Creo en la Iglesia, que es una, santa, católica y apostólica. Confieso que hay un solo bautismo para el perdón de los pecados. Espero la resurrección de los muertos y la vida del mundo futuro. Amén.",
+            "author": "Iglesia Católica",
+            "source": "Credo Niceno-Constantinopolitano"
+        },
+        "SENAL DE LA CRUZ": {
+            "text": "En el nombre del Padre, y del Hijo, y del Espíritu Santo. Amén.",
+            "author": "Tradición Católica",
+            "source": "Signum Crucis"
+        },
+        "ACTOS FE ESPERANZA CARIDAD": {
+            "text": "Creo en Dios Padre; creo en Dios Hijo; creo en Dios Espíritu Santo; creo en la Santísima Trinidad; creo en mi Señor Jesucristo, Dios y Hombre verdadero. Espero en Dios Padre; espero en Dios Hijo; espero en Dios Espíritu Santo; espero en la Santísima Trinidad; espero en mi Señor Jesucristo, Dios y Hombre verdadero. Amo a Dios Padre; amo a Dios Hijo; amo a Dios Espíritu Santo; amo a la Santísima Trinidad; amo a mi Señor Jesucristo, Dios y Hombre verdadero.",
+            "author": "Tradición Católica",
+            "source": "Actos Teologales"
+        },
+        "ACTO DE REPARACION": {
+            "text": "Dios mío, yo creo, adoro, espero y te amo. Te pido perdón por los que no creen, no adoran, no esperan ni te aman.",
+            "author": "Ángel de Fátima",
+            "source": "Acto de Reparación - webcatolicodejavier.org"
+        },
+        "ADORO TE DEVOTE": {
+            "text": "Te adoro con devoción, Dios escondido, oculto verdaderamente bajo estas apariencias. A Ti se somete mi corazón por completo, y se rinde totalmente al contemplarte. Al juzgar de Ti, se equivocan la vista, el tacto, el gusto; pero basta el oído para creer con firmeza; creo todo lo que ha dicho el Hijo de Dios: nada es más verdadero que esta Palabra de verdad. En la Cruz se escondía sólo la Divinidad, pero aquí se esconde también la Humanidad; sin embargo, creo y confieso ambas cosas, y pido lo que pidió aquel ladrón arrepentido. No veo las llagas como las vió Tomás pero confieso que eres mi Dios: haz que yo crea más y más en Ti, que en Ti espere y que te ame. ¡Memorial de la muerte del Señor! Pan vivo que das vida al hombre: concede a mi alma que de Ti viva y que siempre saboree tu dulzura. Señor Jesús, Pelícano bueno, límpiame a mí, inmundo, con tu Sangre, de la que una sola gota puede liberar de todos los crímenes al mundo entero. Jesús, a quien ahora veo oculto, te ruego que se cumpla lo que tanto ansío: que al mirar tu rostro cara a cara, sea yo feliz viendo tu gloria. Amén.",
+            "author": "Santo Tomás de Aquino",
+            "source": "Adoro Te Devote - webcatolicodejavier.org"
         }
     },
     "quotes": {
